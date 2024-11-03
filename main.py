@@ -21,6 +21,12 @@ def local():
 
     # Search for KML files in the current directory
     for kml in glob.glob('*.kml'):
+        if os.path.exists(searchDir + "/" + kml.replace('.kml', '.csv')):
+            overwrite = input(f"File '{kml.replace('.kml', '.csv')}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
+            if overwrite != 'y':
+                print(f"Skipping {kml}...")
+                continue
+
         print(f"Exporting {kml} to csv...")
         export(searchDir + "/" + kml)
         print("Done!")
