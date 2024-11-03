@@ -8,19 +8,33 @@ import pandas as pd
 import copy
 from datetime import datetime
 
-
 def local():
     searchDir = input('Show me the directory containing the track files (defaults to user Downloads folder): ')
     if searchDir == '':
         searchDir = os.path.join(os.path.expanduser('~'), 'Downloads')
     
-    for kml in glob.glob('*.kml', root_dir=searchDir):
+    # Save the current working directory
+    cwd = os.getcwd()
+
+    # Change to the search directory
+    os.chdir(searchDir)
+
+    # Search for KML files in the current directory
+    for kml in glob.glob('*.kml'):
         print(f"Exporting {kml} to csv...")
         export(searchDir + "/" + kml)
         print("Done!")
 
-    print(f"A total of {len(glob.glob('*.kml', root_dir=searchDir))} files in '{searchDir}' folder were exported to csv.")
-    
+    # Change back to the original working directory
+    os.chdir(cwd)
+
+    # Count the total number of KML files
+    os.chdir(searchDir)
+    total_files = len(glob.glob('*.kml'))
+    os.chdir(cwd)
+
+    print(f"A total of {total_files} files in '{searchDir}' folder were exported to csv.")
+
 def remote():
     tn = input("Enter the tail number of your aircraft : ")
     
@@ -51,82 +65,33 @@ def remote():
         f.write(trackRAW.content)
     print("Done!")
     
-    print("Exporting track to csv...")
-    try:
-        export("track.kml")
-        print("Done!")
-    except:
-        print("There was an error exporting the .kml to .csv...")
-    finally:
-        print("Cleaning up...")
-        os.remove("track.kml")
-        print("Done!")
-    
-    print(f"Exported flight on {pdataDisplay[int(flight)][0]} from {pdataDisplay[int(flight)][2]} to {pdataDisplay[int(flight)][3]} to csv.")
-        
+    local()
+
 def fURL():
-    url = input("Enter the URL of the flight you would like to download (should end with '.../tracklog'): ")
-    print("Downloading flight...")
-
-    try:
-        r = fas.downloadFLink(url)
-    except INCORRECTURL:
-        print("That is not the expected URL. Please check the docs for which url to input")
-
-    with open ("track.kml", "wb") as f:
-        f.write(r.content)
+    url = input("Enter the full URL to the track file you want to download: ")
+    print(f"Downloading track from {url}...")
+    trackRAW = fas.downloadFromURL(url)
+    with open("track.kml", "wb") as f:
+        f.write(trackRAW.content)
     print("Done!")
     
-    print("Exporting track to csv...")
-    try:
-        export("track.kml")
-        print("`track.csv` has been exported to the Downloads folder.")
-    except:
-        print("There was an error converting the track file.")
-    finally:
-        print("Cleaning up track.kml...")
-        os.remove("track.kml")
-        print("Done!")
-    
+    local()
 
-if __name__ == '__main__':
-    print("""##################_____################_____####################_____##################
-#################/\####\##############/\####\##################/\####\#################
-################/::\____\############/::\####\################/::\####\################
-###############/:::/####/############\:::\####\##############/::::\####\###############
-##############/:::/####/##############\:::\####\############/::::::\####\##############
-#############/:::/####/################\:::\####\##########/:::/\:::\####\#############
-############/:::/____/##################\:::\####\########/:::/##\:::\####\############
-###########/::::\####\##################/::::\####\######/:::/####\:::\####\###########
-##########/::::::\____\________########/::::::\####\####/:::/####/#\:::\####\##########
-#########/:::/\:::::::::::\####\######/:::/\:::\####\##/:::/####/###\:::\#___\#########
-########/:::/##|:::::::::::\____\####/:::/##\:::\____\/:::/____/##___\:::|####|########
-########\::/###|::|~~~|~~~~~########/:::/####\::/####/\:::\####\#/\##/:::|____|########
-#########\/____|::|###|############/:::/####/#\/____/##\:::\####/::\#\::/####/#########
-###############|::|###|###########/:::/####/############\:::\###\:::\#\/____/##########
-###############|::|###|##########/:::/####/##############\:::\###\:::\____\############
-###############|::|###|##########\::/####/################\:::\##/:::/####/############
-###############|::|###|###########\/____/##################\:::\/:::/####/#############
-###############|::|###|#####################################\::::::/####/##############
-###############\::|###|######################################\::::/####/###############
-################\:|###|#######################################\::/____/################
-#################\|___|################################################################
-#######################################################################################""")
-    print()
-    print("Welcome to the KML to G1000 converter!")
-    print("This program will convert all KML files in a folder to CSV files that can be imported into the Garmin G1000.")
-    print("Please select an option:")
-    print("\t\t1. Convert files in a local directory")
-    print("\t\t2. Find files directly on flightaware.com")
-    print("\t\t3. Input a URL")
-    option = input("$: ")
-    
-    if option == '1':
-        local()
-    elif option == '2':
-        remote()
-    elif option == '3':
-        fURL()
-    else:
-        print("Invalid option. Exiting...")
-        sys.exit(1)
+print()
+print("Welcome to the KML to G1000 converter!")
+print("This program will convert all KML files in a folder to CSV files that can be imported into the Garmin G1000.")
+print("Please select an option:")
+print("\t\t1. Convert files in a local directory")
+print("\t\t2. Find files directly on flightaware.com")
+print("\t\t3. Input a URL")
+option = input("$: ")
+
+if option == '1':
+    local()
+elif option == '2':
+    remote()
+elif option == '3':
+    fURL()
+else:
+    print("Invalid option. Exiting...")
+    sys.exit(1)
