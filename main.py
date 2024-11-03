@@ -81,7 +81,18 @@ def remote():
     
     print(f"Finding history for aircraft: {tn}...")
     tn = tn.upper()
+    
+    # Debugging: print tail number
+    print(f"DEBUG: Tail number after conversion to upper case: {tn}")
+    
     pdataRAW = fas.findPlaneData(tn)
+    
+    # Debugging: print raw plane data response
+    print(f"DEBUG: Raw plane data response: {pdataRAW}")
+    
+    if not pdataRAW:
+        print("No data found for the specified tail number.")
+        return
     
     pdataDisplay = copy.deepcopy(pdataRAW)
     _data = ["Date", "Time", "Departure", "Destination"]
@@ -102,6 +113,10 @@ def remote():
     
     print(f"Downloading flight {flight}...")
     trackRAW = fas.downloadKML(tn, pdataRAW, int(flight))
+    
+    # Debugging: print raw track data response
+    print(f"DEBUG: Raw track data response status: {trackRAW.status_code}")
+    
     with open("track.kml", "wb") as f:
         f.write(trackRAW.content)
     print("Done!")
@@ -111,6 +126,11 @@ def remote():
 def fURL(url, output_file=None):
     print(f"Downloading track from {url}...")
     trackRAW = fas.downloadFromURL(url)
+    
+    # Debugging: print URL and response status
+    print(f"DEBUG: URL: {url}")
+    print(f"DEBUG: Response status code: {trackRAW.status_code}")
+    
     if not output_file:
         output_file = "track.kml"
     with open(output_file, "wb") as f:
@@ -124,6 +144,9 @@ if args.input_kml_dir:
     if not os.path.isdir(args.input_kml_dir):
         print(f"Error: The specified input directory '{args.input_kml_dir}' does not exist.")
         sys.exit(1)
+    # Set output directory to input directory if not specified
+    if not args.output_csv_dir:
+        args.output_csv_dir = args.input_kml_dir
     local(searchDir=args.input_kml_dir, outputDir=args.output_csv_dir)
 
 elif args.input_kml:
