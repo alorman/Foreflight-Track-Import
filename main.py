@@ -23,17 +23,27 @@ readline.set_completer(complete_path)
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description='KML to G1000 CSV Converter')
 parser.add_argument('--input-kml', type=str, help='Path to the input KML file')
+parser.add_argument('--input-kml-dir', type=str, help='Path to the directory containing KML files')
 parser.add_argument('--input-url', type=str, help='URL of the KML file to download')
-parser.add_argument('--output-csv', type=str, help='Path to the output CSV file')
+parser.add_argument('--output-csv', type=str, help='Path to the output CSV file (only for single file input)')
+parser.add_argument('--output-csv-dir', type=str, help='Path to the directory to save output CSV files (only for directory input)')
 args = parser.parse_args()
 
-def local(searchDir=None):
+def local(searchDir=None, outputDir=None):
     if not searchDir:
         searchDir = input('Show me the directory containing the track files (defaults to user Downloads folder): ')
         if searchDir == '':
             searchDir = os.path.join(os.path.expanduser('~'), 'Downloads')
         else:
             searchDir = os.path.abspath(searchDir)
+
+    # Set output directory to the input directory if not specified
+    if not outputDir:
+        outputDir = searchDir
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(outputDir):
+        os.makedirs(outputDir)
 
     # Save the current working directory
     cwd = os.getcwd()
@@ -43,7 +53,7 @@ def local(searchDir=None):
 
     # Search for KML files in the current directory
     for kml in glob.glob('*.kml'):
-        output_file = searchDir + "/" + kml.replace('.kml', '.csv')
+        output_file = os.path.join(outputDir, kml.replace('.kml', '.csv'))
         if os.path.exists(output_file):
             overwrite = input(f"File '{output_file}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
             if overwrite != 'y':
@@ -51,7 +61,7 @@ def local(searchDir=None):
                 continue
 
         print(f"Exporting {kml} to csv...")
-        export(searchDir + "/" + kml)
+        export(os.path.join(searchDir, kml))
         print(f"Saving to {output_file}...")
         os.rename(kml.replace('.kml', '.csv'), output_file)
         print("Done!")
@@ -110,25 +120,36 @@ def fURL(url, output_file=None):
     local()
 
 # Main logic based on command-line arguments
-if args.input_kml:
-    if args.output_csv:
-        if os.path.exists(args.output_file):
-            overwrite = input(f"File '{args.output_file}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
-            if overwrite != 'y':
-                print(f"Skipping '{args.input_file}'...")
-                sys.exit(0)
-        print(f"Exporting '{args.input_file}'...")
-        export(args.input_file)
-        print(f"Saving to '{args.output_file}'...")
-        os.rename(args.input_file.replace('.kml', '.csv'), args.output_file)
-        print(f"Exported '{args.input_file}' to '{args.output_file}'")
+if args.input_kml_dir:
+    if not os.path.isdir(args.input_kml_dir):
+        print(f"Error: The specified input directory '{args.input_kml_dir}' does not exist.")
+        sys.exit(1)
+    local(searchDir=args.input_kml_dir, outputDir=args.output_csv_dir)
+
+elif args.input_kml:
+    if os.path.isdir(args.input_kml):
+        # Process all KML files in the directory
+        local(searchDir=args.input_kml)
     else:
-        default_output = args.input_file.replace('.kml', '.csv')
-        export(args.input_file)
-        print(f"Exported '{args.input_file}' to '{default_output}'")
+        # Process a single KML file
+        if args.output_csv:
+            if args.output_csv and os.path.exists(args.output_csv):
+                overwrite = input(f"File '{args.output_csv}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
+                if overwrite != 'y':
+                    print(f"Skipping '{args.input_kml}'...")
+                    sys.exit(0)
+            print(f"Exporting '{args.input_kml}'...")
+            export(args.input_kml)
+            print(f"Saving to '{args.output_csv}'...")
+            os.rename(args.input_kml.replace('.kml', '.csv'), args.output_csv)
+            print(f"Exported '{args.input_kml}' to '{args.output_csv}'")
+        else:
+            default_output = args.input_kml.replace('.kml', '.csv')
+            export(args.input_kml)
+            print(f"Exported '{args.input_kml}' to '{default_output}'")
 
 elif args.input_url:
-    fURL(args.input_url, args.output_file)
+    fURL(args.input_url, args.output_csv)
 
 else:
     print()
