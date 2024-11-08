@@ -1,5 +1,5 @@
 # KML to G1000 CSV Converter
-[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/alorman/foreflight-track-import/issues)  [![HitCount](https://hits.dwyl.com/{username}/{project-name}.svg)](https://hits.dwyl.com/{username}/{project-name}) ![Python](https://img.shields.io/badge/python-3.8-blue.svg)  
+[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/alorman/foreflight-track-import/issues)  ![Python](https://img.shields.io/badge/python-3.8-blue.svg)  
 
 
 ## About The Project
@@ -10,10 +10,7 @@ This python script can convert either [FlightAware](https://www.flightaware.com/
 
 ![](img/flightaware-to-ipad.svg)
 
-After moving the track log from one iPad to another, rather than sourcing from FlightAware.  
-
-**Much Better:**
-![](img/high-res-trackline.jpg)  
+After moving the track log from one iPad to another, rather than sourcing from FlightAware.   
 
 I worked on this when I forgot my iPad during a flight. Other than the lack of a nice EFB (electronic flight bag), I didn't have a track log to go with my logbook entry. While there's nothing wrong with this, it bothered me. My CFI's iPad had logged the flight, so I asked him to send it the track log to me.
 In my search for converters, I found the original project [FlightAware to Foreflight](https://github.com/dscpsyl/FlightawareToForeflight)  
@@ -22,6 +19,10 @@ Even though I have a FlightAware Pro account, the track log was significantly de
 
 The decimated output from FlightAware vs the online display:
 ![](img/flight-aware-export1200px.jpg)
+
+
+**Much Better:**
+![](img/high-res-trackline.jpg) 
 
 So:
 I forked the repo and added the following features:  
