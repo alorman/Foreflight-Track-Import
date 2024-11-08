@@ -18,7 +18,11 @@ In my search for converters, I found the original project [FlightAware to Forefl
 Even though I have a FlightAware Pro account, the track log was significantly decimated. I wanted the highest density of track points as possible.
 
 The decimated output from FlightAware vs the online display:
-![](img/flight-aware-export1200px.jpg)
+![](img/flight-aware-online-track.PNG)
+The output online looks pretty good. 
+
+**But when you export it, the data is significantly decimated.**
+![](img/thumbnail_KGON Groton-New London.jpg)
 
 
 **Much Better:**
