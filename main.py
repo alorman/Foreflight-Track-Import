@@ -108,20 +108,30 @@ def remote():
     local()
 
 def fURL(url, output_file=None):
+    import atexit
+    output_file = "track.kml"  # Temporary file to store wget download
+
+    # Register cleanup function to delete the downloaded file when the script exits
+    def cleanup():
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            print(f"Deleted temporary file: {output_file}")
+    atexit.register(cleanup)
     print(f"Downloading track from {url}...")
     trackRAW = fas.downloadFromURL(url)
     
-    # Debugging: print URL and response status
+    # Debugging: print URL
     print(f"DEBUG: URL: {url}")
-    print(f"DEBUG: Response status code: {trackRAW.status_code}")
     
-    if not output_file:
-        output_file = "track.kml"
-    with open(output_file, "wb") as f:
-        f.write(trackRAW.content)
-    print("Done!")
-    
-    local()
+    if trackRAW is not None:
+        print("DEBUG: File downloaded successfully.")
+        
+        with open(output_file, "wb") as f:
+            f.write(trackRAW.read())
+        print("Done!")
+    else:
+        print("Failed to download the track from the URL. Exiting...")
+        sys.exit(1)
 
 # Main logic based on command-line arguments
 if args.input_kml_dir:
@@ -166,7 +176,14 @@ else:
     option = input("$: ")
     
     if option == '1':
-        local()
+        searchDir = input('Enter the directory containing the KML files: ').strip()
+        if not searchDir:
+            print("Error: No input directory specified.")
+            sys.exit(1)
+        outputDir = input('Enter the output directory for CSV files (leave blank to use the input directory): ').strip()
+        if not outputDir:
+            outputDir = searchDir
+        local(searchDir=searchDir, outputDir=os.path.abspath(outputDir))
     elif option == '2':
         remote()
     elif option == '3':
