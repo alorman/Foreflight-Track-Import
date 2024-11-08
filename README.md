@@ -21,8 +21,8 @@ The decimated output from FlightAware vs the online display:
 ![](img/flight-aware-online-track.PNG)
 The output online looks pretty good. 
 
-**But when you export it, the data is significantly decimated.**
-![](img/thumbnail_KGON-Groton-New London.jpg)
+**But when you export it, the data is significantly decimated.**  
+![](img/thumbnail_KGON-Groton-New London.jpg)  
 
 
 **Much Better:**
