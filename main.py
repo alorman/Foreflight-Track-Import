@@ -31,29 +31,21 @@ args = parser.parse_args()
 
 def local(searchDir=None, outputDir=None):
     if not searchDir:
-        searchDir = input('Show me the directory containing the track files (defaults to user Downloads folder): ')
-        if searchDir == '':
-            searchDir = os.path.join(os.path.expanduser('~'), 'Downloads')
-        else:
-            searchDir = os.path.abspath(searchDir)
+        print("Error: No input directory specified.")
+        sys.exit(1)
+    searchDir = os.path.abspath(searchDir)
 
     # Set output directory to the input directory if not specified
     if not outputDir:
-        outputDir = searchDir
+        outputDir = os.path.abspath(searchDir)
 
     # Create output directory if it doesn't exist
     if not os.path.exists(outputDir):
         os.makedirs(outputDir)
 
-    # Save the current working directory
-    cwd = os.getcwd()
-
-    # Change to the search directory
-    os.chdir(searchDir)
-
-    # Search for KML files in the current directory
-    for kml in glob.glob('*.kml'):
-        output_file = os.path.join(outputDir, kml.replace('.kml', '.csv'))
+    # Search for KML files in the specified directory
+    for kml in glob.glob(os.path.join(searchDir, '*.kml')):
+        output_file = os.path.join(outputDir, os.path.basename(kml).replace('.kml', '.csv'))
         if os.path.exists(output_file):
             overwrite = input(f"File '{output_file}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
             if overwrite != 'y':
@@ -61,19 +53,11 @@ def local(searchDir=None, outputDir=None):
                 continue
 
         print(f"Exporting {kml} to csv...")
-        export(os.path.join(searchDir, kml))
-        print(f"Saving to {output_file}...")
-        os.rename(kml.replace('.kml', '.csv'), output_file)
+        export(kml, output_file)
         print("Done!")
 
-    # Change back to the original working directory
-    os.chdir(cwd)
-
     # Count the total number of KML files
-    os.chdir(searchDir)
-    total_files = len(glob.glob('*.kml'))
-    os.chdir(cwd)
-
+    total_files = len(glob.glob(os.path.join(searchDir, '*.kml')))
     print(f"A total of {total_files} files in '{searchDir}' folder were exported to csv.")
 
 def remote():
@@ -81,7 +65,18 @@ def remote():
     
     print(f"Finding history for aircraft: {tn}...")
     tn = tn.upper()
+    
+    # Debugging: print tail number
+    print(f"DEBUG: Tail number after conversion to upper case: {tn}")
+    
     pdataRAW = fas.findPlaneData(tn)
+    
+    # Debugging: print raw plane data response
+    print(f"DEBUG: Raw plane data response: {pdataRAW}")
+    
+    if not pdataRAW:
+        print("No data found for the specified tail number.")
+        return
     
     pdataDisplay = copy.deepcopy(pdataRAW)
     _data = ["Date", "Time", "Departure", "Destination"]
@@ -102,6 +97,10 @@ def remote():
     
     print(f"Downloading flight {flight}...")
     trackRAW = fas.downloadKML(tn, pdataRAW, int(flight))
+    
+    # Debugging: print raw track data response
+    print(f"DEBUG: Raw track data response status: {trackRAW.status_code}")
+    
     with open("track.kml", "wb") as f:
         f.write(trackRAW.content)
     print("Done!")
@@ -109,22 +108,39 @@ def remote():
     local()
 
 def fURL(url, output_file=None):
+    import atexit
+    output_file = "track.kml"  # Temporary file to store wget download
+
+    # Register cleanup function to delete the downloaded file when the script exits
+    def cleanup():
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            print(f"Deleted temporary file: {output_file}")
+    atexit.register(cleanup)
     print(f"Downloading track from {url}...")
     trackRAW = fas.downloadFromURL(url)
-    if not output_file:
-        output_file = "track.kml"
-    with open(output_file, "wb") as f:
-        f.write(trackRAW.content)
-    print("Done!")
     
-    local()
+    # Debugging: print URL
+    print(f"DEBUG: URL: {url}")
+    
+    if trackRAW is not None:
+        print("DEBUG: File downloaded successfully.")
+        
+        with open(output_file, "wb") as f:
+            f.write(trackRAW.read())
+        print("Done!")
+    else:
+        print("Failed to download the track from the URL. Exiting...")
+        sys.exit(1)
 
 # Main logic based on command-line arguments
 if args.input_kml_dir:
     if not os.path.isdir(args.input_kml_dir):
         print(f"Error: The specified input directory '{args.input_kml_dir}' does not exist.")
         sys.exit(1)
-    local(searchDir=args.input_kml_dir, outputDir=args.output_csv_dir)
+    
+    outputDir = args.output_csv_dir if args.output_csv_dir else args.input_kml_dir
+    local(searchDir=args.input_kml_dir, outputDir=os.path.abspath(outputDir))
 
 elif args.input_kml:
     if os.path.isdir(args.input_kml):
@@ -139,13 +155,11 @@ elif args.input_kml:
                     print(f"Skipping '{args.input_kml}'...")
                     sys.exit(0)
             print(f"Exporting '{args.input_kml}'...")
-            export(args.input_kml)
-            print(f"Saving to '{args.output_csv}'...")
-            os.rename(args.input_kml.replace('.kml', '.csv'), args.output_csv)
+            export(args.input_kml, args.output_csv)
             print(f"Exported '{args.input_kml}' to '{args.output_csv}'")
         else:
             default_output = args.input_kml.replace('.kml', '.csv')
-            export(args.input_kml)
+            export(args.input_kml, default_output)
             print(f"Exported '{args.input_kml}' to '{default_output}'")
 
 elif args.input_url:
@@ -162,7 +176,14 @@ else:
     option = input("$: ")
     
     if option == '1':
-        local()
+        searchDir = input('Enter the directory containing the KML files: ').strip()
+        if not searchDir:
+            print("Error: No input directory specified.")
+            sys.exit(1)
+        outputDir = input('Enter the output directory for CSV files (leave blank to use the input directory): ').strip()
+        if not outputDir:
+            outputDir = searchDir
+        local(searchDir=searchDir, outputDir=os.path.abspath(outputDir))
     elif option == '2':
         remote()
     elif option == '3':
