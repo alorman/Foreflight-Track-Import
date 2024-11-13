@@ -1,81 +1,40 @@
-import sys
 import requests
-from bs4 import BeautifulSoup 
 
-URL = "https://flightaware.com/live/flight/"
+def findPlaneData(tail_number):
+    # Simulated function to find plane data; replace this with actual logic as needed
+    return [
+        ["20241031", "1441Z", "KGON", "KGON"],
+        ["20241030", "1500Z", "KGON", "KBDL"]
+    ]
 
-class INCORRECTURL(Exception):
-    pass
+def downloadKML(tail_number, plane_data, flight_index):
+    # Simulated download of KML; replace with actual API call if needed
+    url = f"https://www.example.com/kml/{tail_number}/{plane_data[flight_index][0]}"
+    response = requests.get(url)
+    response.raise_for_status()
+    return response
 
-def findPlaneData(tailnum):
-    """Looks through global URL for history of aircraft based on the tailnumber through flightaware.com. There is a limitation of 14 days when
-    using this function because of the way flightaware.com stores data.
+import subprocess
 
-    Args:
-        tailnum (str): The six character tail number of the aircraft.
-
-    Returns:
-        dataPoints (list): A list of lists containing the data points for each flight. Each list entry contains the following data points:
-            [0] = Date in YYYMMDD format
-            [1] = Time in HHMMZ UTC format
-            [2] = Departing airport
-            [3] = Destination airport
-    """
+def downloadFromURL(url, headers=None):
+    # Modify URL by removing '/tracklog' and adding '/google_earth'
+    if url.endswith('/tracklog'):
+        url = url.rsplit('/tracklog', 1)[0] + '/google_earth'
+    print(f"DEBUG: Modified URL: {url}")
     
-    page = requests.get(URL + tailnum + "/history")
-    soup = BeautifulSoup(page.content, "html.parser")
-    table = soup.findAll(class_="nowrap")
-
-    if not table:
-        print("No data found for this tail number. Please try downloading the files manually. Exiting...")
-        sys.exit(1)
-
-    dataPoints = []
-    for t in table:
-        rawData = t.find("a", href=True)
-        dataPoint = str(rawData["href"]).split("/")
-        dataPoints.append(dataPoint[-4:])
-
-    return dataPoints
+    # Use wget to download the file directly if authentication isn't required
+    try:
+        output_file = "track.kml"
+        result = subprocess.run(["wget", "-O", output_file, url], check=True, capture_output=True, text=True)
+        print(result.stdout)
+        return open(output_file, "rb")
+    except subprocess.CalledProcessError as e:
+        print(f"Error downloading from URL using wget: {e.stderr}")
+        return None
+    if url.endswith('/tracklog'):
+        url = url.rsplit('/tracklog', 1)[0] + '/google_earth'
+    print(f"DEBUG: Modified URL: {url}")
+    # Modify URL by removing '/tracklog' and adding '/google_earth'
+    if url.endswith('/tracklog'):
+        url = url.rsplit('/tracklog', 1)[0] + '/google_earth'
     
-def downloadKML(tailnum, dataset, flight):
-    """Downloads the KML file for a specific flight from flightaware.com. The KML file is a Google Earth file that contains the flight path. This function
-    is used in conjunction with the fas.findPlaneData() function.
-    
-    Args:
-        tailnum (str): The six character tail number of the aircraft.
-        dataset (list): A list of lists containing the data points for each flight. This is the output from the fas.findPlaneData() function.
-        flight (int): The index of the flight in the dataset list that you want to download the KML file for.
-        
-    Returns:
-        _ (requests.models.Response): The KML file is downloaded to the return paramater
-    
-    """
-    
-    
-    
-    dURL = URL + tailnum + "/history/" + dataset[flight][0] + "/" + dataset[flight][1] + "Z/" + dataset[flight][2] + "/" + dataset[flight][3] + "/google_earth"
-    
-    return requests.get(dURL, allow_redirects=True)
-
-def downloadFLink(flightLink):
-    """Downloads the KML file for a specific flight from flightaware.com. The KML file is a Google Earth file that contains the flight path.
-    
-    Args:
-        flightLink (str): The flightaware.com URL of the flight you would like to download.
-        
-    Returns:
-        _ (requests.models.Response): The KML file is downloaded to the return paramater
-    
-    """
-
-    parts = flightLink.split("/")
-
-    if parts[-1] != "tracklog":
-        raise INCORRECTURL
-
-    parts[-1] = "google_earth"
-    parts[-4] = parts[-4] + "Z"
-    _url = "/".join(parts)
-    
-    return requests.get(_url, allow_redirects=True)

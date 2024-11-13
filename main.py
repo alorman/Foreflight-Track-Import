@@ -2,31 +2,81 @@ import os
 import sys
 import glob
 import re
+import readline
+import argparse
 from kml2g1000 import export
 import fas
 import pandas as pd
 import copy
 from datetime import datetime
 
+# Function to enable tab-completion for file paths
+def complete_path(text, state):
+    import glob
+    return (glob.glob(text + '*') + [None])[state]
 
-def local():
-    searchDir = input('Show me the directory containing the track files (defaults to user Downloads folder): ')
-    if searchDir == '':
-        searchDir = os.path.join(os.path.expanduser('~'), 'Downloads')
-    
-    for kml in glob.glob('*.kml', root_dir=searchDir):
+# Enable tab-completion for input
+readline.set_completer_delims('\t')
+readline.parse_and_bind("tab: complete")
+readline.set_completer(complete_path)
+
+# Parse command-line arguments
+parser = argparse.ArgumentParser(description='KML to G1000 CSV Converter')
+parser.add_argument('--input-kml', type=str, help='Path to the input KML file')
+parser.add_argument('--input-kml-dir', type=str, help='Path to the directory containing KML files')
+parser.add_argument('--input-url', type=str, help='URL of the KML file to download')
+parser.add_argument('--output-csv', type=str, help='Path to the output CSV file (only for single file input)')
+parser.add_argument('--output-csv-dir', type=str, help='Path to the directory to save output CSV files (only for directory input)')
+args = parser.parse_args()
+
+def local(searchDir=None, outputDir=None):
+    if not searchDir:
+        print("Error: No input directory specified.")
+        sys.exit(1)
+    searchDir = os.path.abspath(searchDir)
+
+    # Set output directory to the input directory if not specified
+    if not outputDir:
+        outputDir = os.path.abspath(searchDir)
+
+    # Create output directory if it doesn't exist
+    if not os.path.exists(outputDir):
+        os.makedirs(outputDir)
+
+    # Search for KML files in the specified directory
+    for kml in glob.glob(os.path.join(searchDir, '*.kml')):
+        output_file = os.path.join(outputDir, os.path.basename(kml).replace('.kml', '.csv'))
+        if os.path.exists(output_file):
+            overwrite = input(f"File '{output_file}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
+            if overwrite != 'y':
+                print(f"Skipping {kml}...")
+                continue
+
         print(f"Exporting {kml} to csv...")
-        export(searchDir + "/" + kml)
+        export(kml, output_file)
         print("Done!")
 
-    print(f"A total of {len(glob.glob('*.kml', root_dir=searchDir))} files in '{searchDir}' folder were exported to csv.")
-    
+    # Count the total number of KML files
+    total_files = len(glob.glob(os.path.join(searchDir, '*.kml')))
+    print(f"A total of {total_files} files in '{searchDir}' folder were exported to csv.")
+
 def remote():
     tn = input("Enter the tail number of your aircraft : ")
     
     print(f"Finding history for aircraft: {tn}...")
     tn = tn.upper()
+    
+    # Debugging: print tail number
+    print(f"DEBUG: Tail number after conversion to upper case: {tn}")
+    
     pdataRAW = fas.findPlaneData(tn)
+    
+    # Debugging: print raw plane data response
+    print(f"DEBUG: Raw plane data response: {pdataRAW}")
+    
+    if not pdataRAW:
+        print("No data found for the specified tail number.")
+        return
     
     pdataDisplay = copy.deepcopy(pdataRAW)
     _data = ["Date", "Time", "Departure", "Destination"]
@@ -47,71 +97,75 @@ def remote():
     
     print(f"Downloading flight {flight}...")
     trackRAW = fas.downloadKML(tn, pdataRAW, int(flight))
+    
+    # Debugging: print raw track data response
+    print(f"DEBUG: Raw track data response status: {trackRAW.status_code}")
+    
     with open("track.kml", "wb") as f:
         f.write(trackRAW.content)
     print("Done!")
     
-    print("Exporting track to csv...")
-    try:
-        export("track.kml")
-        print("Done!")
-    except:
-        print("There was an error exporting the .kml to .csv...")
-    finally:
-        print("Cleaning up...")
-        os.remove("track.kml")
-        print("Done!")
+    local()
+
+def fURL(url, output_file=None):
+    import atexit
+    output_file = "track.kml"  # Temporary file to store wget download
+
+    # Register cleanup function to delete the downloaded file when the script exits
+    def cleanup():
+        if os.path.exists(output_file):
+            os.remove(output_file)
+            print(f"Deleted temporary file: {output_file}")
+    atexit.register(cleanup)
+    print(f"Downloading track from {url}...")
+    trackRAW = fas.downloadFromURL(url)
     
-    print(f"Exported flight on {pdataDisplay[int(flight)][0]} from {pdataDisplay[int(flight)][2]} to {pdataDisplay[int(flight)][3]} to csv.")
+    # Debugging: print URL
+    print(f"DEBUG: URL: {url}")
+    
+    if trackRAW is not None:
+        print("DEBUG: File downloaded successfully.")
         
-def fURL():
-    url = input("Enter the URL of the flight you would like to download (should end with '.../tracklog'): ")
-    print("Downloading flight...")
-
-    try:
-        r = fas.downloadFLink(url)
-    except INCORRECTURL:
-        print("That is not the expected URL. Please check the docs for which url to input")
-
-    with open ("track.kml", "wb") as f:
-        f.write(r.content)
-    print("Done!")
-    
-    print("Exporting track to csv...")
-    try:
-        export("track.kml")
-        print("`track.csv` has been exported to the Downloads folder.")
-    except:
-        print("There was an error converting the track file.")
-    finally:
-        print("Cleaning up track.kml...")
-        os.remove("track.kml")
+        with open(output_file, "wb") as f:
+            f.write(trackRAW.read())
         print("Done!")
-    
+    else:
+        print("Failed to download the track from the URL. Exiting...")
+        sys.exit(1)
 
-if __name__ == '__main__':
-    print("""##################_____################_____####################_____##################
-#################/\####\##############/\####\##################/\####\#################
-################/::\____\############/::\####\################/::\####\################
-###############/:::/####/############\:::\####\##############/::::\####\###############
-##############/:::/####/##############\:::\####\############/::::::\####\##############
-#############/:::/####/################\:::\####\##########/:::/\:::\####\#############
-############/:::/____/##################\:::\####\########/:::/##\:::\####\############
-###########/::::\####\##################/::::\####\######/:::/####\:::\####\###########
-##########/::::::\____\________########/::::::\####\####/:::/####/#\:::\####\##########
-#########/:::/\:::::::::::\####\######/:::/\:::\####\##/:::/####/###\:::\#___\#########
-########/:::/##|:::::::::::\____\####/:::/##\:::\____\/:::/____/##___\:::|####|########
-########\::/###|::|~~~|~~~~~########/:::/####\::/####/\:::\####\#/\##/:::|____|########
-#########\/____|::|###|############/:::/####/#\/____/##\:::\####/::\#\::/####/#########
-###############|::|###|###########/:::/####/############\:::\###\:::\#\/____/##########
-###############|::|###|##########/:::/####/##############\:::\###\:::\____\############
-###############|::|###|##########\::/####/################\:::\##/:::/####/############
-###############|::|###|###########\/____/##################\:::\/:::/####/#############
-###############|::|###|#####################################\::::::/####/##############
-###############\::|###|######################################\::::/####/###############
-################\:|###|#######################################\::/____/################
-#################\|___|################################################################
-#######################################################################################""")
+# Main logic based on command-line arguments
+if args.input_kml_dir:
+    if not os.path.isdir(args.input_kml_dir):
+        print(f"Error: The specified input directory '{args.input_kml_dir}' does not exist.")
+        sys.exit(1)
+    
+    outputDir = args.output_csv_dir if args.output_csv_dir else args.input_kml_dir
+    local(searchDir=args.input_kml_dir, outputDir=os.path.abspath(outputDir))
+
+elif args.input_kml:
+    if os.path.isdir(args.input_kml):
+        # Process all KML files in the directory
+        local(searchDir=args.input_kml)
+    else:
+        # Process a single KML file
+        if args.output_csv:
+            if args.output_csv and os.path.exists(args.output_csv):
+                overwrite = input(f"File '{args.output_csv}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
+                if overwrite != 'y':
+                    print(f"Skipping '{args.input_kml}'...")
+                    sys.exit(0)
+            print(f"Exporting '{args.input_kml}'...")
+            export(args.input_kml, args.output_csv)
+            print(f"Exported '{args.input_kml}' to '{args.output_csv}'")
+        else:
+            default_output = args.input_kml.replace('.kml', '.csv')
+            export(args.input_kml, default_output)
+            print(f"Exported '{args.input_kml}' to '{default_output}'")
+
+elif args.input_url:
+    fURL(args.input_url, args.output_csv)
+
+else:
     print()
     print("Welcome to the KML to G1000 converter!")
     print("This program will convert all KML files in a folder to CSV files that can be imported into the Garmin G1000.")
@@ -122,11 +176,19 @@ if __name__ == '__main__':
     option = input("$: ")
     
     if option == '1':
-        local()
+        searchDir = input('Enter the directory containing the KML files: ').strip()
+        if not searchDir:
+            print("Error: No input directory specified.")
+            sys.exit(1)
+        outputDir = input('Enter the output directory for CSV files (leave blank to use the input directory): ').strip()
+        if not outputDir:
+            outputDir = searchDir
+        local(searchDir=searchDir, outputDir=os.path.abspath(outputDir))
     elif option == '2':
         remote()
     elif option == '3':
-        fURL()
+        url = input("Enter the full URL to the track file you want to download: ")
+        fURL(url)
     else:
         print("Invalid option. Exiting...")
         sys.exit(1)
