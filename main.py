@@ -1,194 +1,200 @@
+#!/usr/bin/env python3
+
+import argparse
 import os
 import sys
 import glob
-import re
-import readline
-import argparse
+
+# Import the 'export' function from your updated kml2g1000.py
+# Make sure kml2g1000.py is in the same folder or install it as a module.
 from kml2g1000 import export
-import fas
-import pandas as pd
-import copy
-from datetime import datetime
 
-# Function to enable tab-completion for file paths
-def complete_path(text, state):
-    import glob
-    return (glob.glob(text + '*') + [None])[state]
 
-# Enable tab-completion for input
-readline.set_completer_delims('\t')
-readline.parse_and_bind("tab: complete")
-readline.set_completer(complete_path)
+def convert_single_kml(input_kml, output_csv=None):
+    """
+    Convert a single KML file to CSV.
+    If output_csv is None, use the same directory & base name as the input KML.
+    If output_csv exists, skip conversion.
+    """
+    input_kml = os.path.abspath(input_kml)
 
-# Parse command-line arguments
-parser = argparse.ArgumentParser(description='KML to G1000 CSV Converter')
-parser.add_argument('--input-kml', type=str, help='Path to the input KML file')
-parser.add_argument('--input-kml-dir', type=str, help='Path to the directory containing KML files')
-parser.add_argument('--input-url', type=str, help='URL of the KML file to download')
-parser.add_argument('--output-csv', type=str, help='Path to the output CSV file (only for single file input)')
-parser.add_argument('--output-csv-dir', type=str, help='Path to the directory to save output CSV files (only for directory input)')
-args = parser.parse_args()
-
-def local(searchDir=None, outputDir=None):
-    if not searchDir:
-        print("Error: No input directory specified.")
+    # Ensure the single KML file actually exists
+    if not os.path.isfile(input_kml):
+        print(f"Error: KML file '{input_kml}' does not exist.")
         sys.exit(1)
-    searchDir = os.path.abspath(searchDir)
 
-    # Set output directory to the input directory if not specified
-    if not outputDir:
-        outputDir = os.path.abspath(searchDir)
-
-    # Create output directory if it doesn't exist
-    if not os.path.exists(outputDir):
-        os.makedirs(outputDir)
-
-    # Search for KML files in the specified directory
-    for kml in glob.glob(os.path.join(searchDir, '*.kml')):
-        output_file = os.path.join(outputDir, os.path.basename(kml).replace('.kml', '.csv'))
-        if os.path.exists(output_file):
-            overwrite = input(f"File '{output_file}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
-            if overwrite != 'y':
-                print(f"Skipping {kml}...")
-                continue
-
-        print(f"Exporting {kml} to csv...")
-        export(kml, output_file)
-        print("Done!")
-
-    # Count the total number of KML files
-    total_files = len(glob.glob(os.path.join(searchDir, '*.kml')))
-    print(f"A total of {total_files} files in '{searchDir}' folder were exported to csv.")
-
-def remote():
-    tn = input("Enter the tail number of your aircraft : ")
-    
-    print(f"Finding history for aircraft: {tn}...")
-    tn = tn.upper()
-    
-    # Debugging: print tail number
-    print(f"DEBUG: Tail number after conversion to upper case: {tn}")
-    
-    pdataRAW = fas.findPlaneData(tn)
-    
-    # Debugging: print raw plane data response
-    print(f"DEBUG: Raw plane data response: {pdataRAW}")
-    
-    if not pdataRAW:
-        print("No data found for the specified tail number.")
-        return
-    
-    pdataDisplay = copy.deepcopy(pdataRAW)
-    _data = ["Date", "Time", "Departure", "Destination"]
-
-    for flight in pdataDisplay:
-        flight[0] = datetime.strptime(flight[0], "%Y%m%d").strftime("%m/%d/%Y")
-        flight[1] = datetime.strptime(flight[1][:-1], "%H%M").strftime("%H:%M " + "Z")
-    
-    historyData = pd.DataFrame(pdataDisplay, columns=_data)
-    print(f"Found {len(pdataRAW)} flights for {tn} within the last 14 days:")
-    print("#"*100)
-    print(historyData)
-    
-    flight = input("Enter the flight you would like to download: ")
-    if not re.fullmatch("^([0-9]){1}$|^([1-9]){2}$", flight) or int(flight) >= len(pdataRAW):
-        print("ERROR: Invalid flight number. Exiting...")
-        sys.exit(1)
-    
-    print(f"Downloading flight {flight}...")
-    trackRAW = fas.downloadKML(tn, pdataRAW, int(flight))
-    
-    # Debugging: print raw track data response
-    print(f"DEBUG: Raw track data response status: {trackRAW.status_code}")
-    
-    with open("track.kml", "wb") as f:
-        f.write(trackRAW.content)
-    print("Done!")
-    
-    local()
-
-def fURL(url, output_file=None):
-    import atexit
-    output_file = "track.kml"  # Temporary file to store wget download
-
-    # Register cleanup function to delete the downloaded file when the script exits
-    def cleanup():
-        if os.path.exists(output_file):
-            os.remove(output_file)
-            print(f"Deleted temporary file: {output_file}")
-    atexit.register(cleanup)
-    print(f"Downloading track from {url}...")
-    trackRAW = fas.downloadFromURL(url)
-    
-    # Debugging: print URL
-    print(f"DEBUG: URL: {url}")
-    
-    if trackRAW is not None:
-        print("DEBUG: File downloaded successfully.")
-        
-        with open(output_file, "wb") as f:
-            f.write(trackRAW.read())
-        print("Done!")
+    # Determine the final CSV path
+    if output_csv is None:
+        base, _ = os.path.splitext(input_kml)
+        output_csv = base + '.csv'
     else:
-        print("Failed to download the track from the URL. Exiting...")
-        sys.exit(1)
+        output_csv = os.path.abspath(output_csv)
 
-# Main logic based on command-line arguments
-if args.input_kml_dir:
-    if not os.path.isdir(args.input_kml_dir):
-        print(f"Error: The specified input directory '{args.input_kml_dir}' does not exist.")
-        sys.exit(1)
-    
-    outputDir = args.output_csv_dir if args.output_csv_dir else args.input_kml_dir
-    local(searchDir=args.input_kml_dir, outputDir=os.path.abspath(outputDir))
-
-elif args.input_kml:
-    if os.path.isdir(args.input_kml):
-        # Process all KML files in the directory
-        local(searchDir=args.input_kml)
-    else:
-        # Process a single KML file
-        if args.output_csv:
-            if args.output_csv and os.path.exists(args.output_csv):
-                overwrite = input(f"File '{args.output_csv}' already exists. Do you want to overwrite it? (y/n): ").strip().lower()
-                if overwrite != 'y':
-                    print(f"Skipping '{args.input_kml}'...")
-                    sys.exit(0)
-            print(f"Exporting '{args.input_kml}'...")
-            export(args.input_kml, args.output_csv)
-            print(f"Exported '{args.input_kml}' to '{args.output_csv}'")
+        # If the user provided a directory, use the same base name
+        if os.path.isdir(output_csv):
+            base_name = os.path.splitext(os.path.basename(input_kml))[0] + '.csv'
+            output_csv = os.path.join(output_csv, base_name)
         else:
-            default_output = args.input_kml.replace('.kml', '.csv')
-            export(args.input_kml, default_output)
-            print(f"Exported '{args.input_kml}' to '{default_output}'")
+            # If it's a file, ensure the parent directory exists
+            out_dir = os.path.dirname(output_csv) or '.'
+            if not os.path.isdir(out_dir):
+                print(f"Error: Output directory '{out_dir}' does not exist.")
+                sys.exit(1)
 
-elif args.input_url:
-    fURL(args.input_url, args.output_csv)
+    # Skip if file already exists
+    if os.path.exists(output_csv):
+        print(f"Skipping '{output_csv}' (already exists).")
+        return
 
-else:
-    print()
-    print("Welcome to the KML to G1000 converter!")
-    print("This program will convert all KML files in a folder to CSV files that can be imported into the Garmin G1000.")
-    print("Please select an option:")
-    print("\t\t1. Convert files in a local directory")
-    print("\t\t2. Find files directly on flightaware.com")
-    print("\t\t3. Input a URL")
-    option = input("$: ")
-    
-    if option == '1':
-        searchDir = input('Enter the directory containing the KML files: ').strip()
-        if not searchDir:
-            print("Error: No input directory specified.")
-            sys.exit(1)
-        outputDir = input('Enter the output directory for CSV files (leave blank to use the input directory): ').strip()
-        if not outputDir:
-            outputDir = searchDir
-        local(searchDir=searchDir, outputDir=os.path.abspath(outputDir))
-    elif option == '2':
-        remote()
-    elif option == '3':
-        url = input("Enter the full URL to the track file you want to download: ")
-        fURL(url)
-    else:
-        print("Invalid option. Exiting...")
+    print(f"Converting '{input_kml}' -> '{output_csv}'")
+    try:
+        # Call the export function, passing the exact output file path
+        export(input_kml, output_csv)
+    except Exception as e:
+        print(f"Error converting '{input_kml}': {e}")
         sys.exit(1)
+    else:
+        print(f"Done converting '{input_kml}' -> '{output_csv}'")
+
+
+def convert_directory_kml(input_kml_dir, output_csv_dir=None):
+    """
+    Convert all KML files in a directory to CSV.
+    If output_csv_dir is None, use the same directory as the input_kml_dir.
+    If output files exist, skip them.
+    Throw an error if the directory doesn't exist.
+    """
+    input_kml_dir = os.path.abspath(input_kml_dir)
+    if not os.path.isdir(input_kml_dir):
+        print(f"Error: Input directory '{input_kml_dir}' does not exist.")
+        sys.exit(1)
+
+    if output_csv_dir is None:
+        # Use the same directory for outputs
+        output_csv_dir = input_kml_dir
+    else:
+        output_csv_dir = os.path.abspath(output_csv_dir)
+        # Throw an error if this output directory doesn't exist
+        if not os.path.isdir(output_csv_dir):
+            print(f"Error: Output directory '{output_csv_dir}' does not exist.")
+            sys.exit(1)
+
+    # Find all KML files
+    kml_files = glob.glob(os.path.join(input_kml_dir, '*.kml'))
+    if not kml_files:
+        print(f"No KML files found in '{input_kml_dir}'")
+        return
+
+    for kml_path in kml_files:
+        base_name = os.path.splitext(os.path.basename(kml_path))[0] + '.csv'
+        output_path = os.path.join(output_csv_dir, base_name)
+
+        if os.path.exists(output_path):
+            print(f"Skipping '{output_path}' (already exists).")
+            continue
+
+        print(f"Converting '{kml_path}' -> '{output_path}'")
+        try:
+            export(kml_path, output_path)
+        except Exception as e:
+            print(f"Error converting '{kml_path}': {e}")
+        else:
+            print(f"Done converting '{kml_path}' -> '{output_path}'")
+
+    print("All possible KML files have been processed.")
+
+
+def download_and_convert_url(input_url, output_csv=None):
+    """
+    Example placeholder for downloading from a FlightAware URL, saving a KML,
+    then converting to CSV. Adjust for your actual download logic.
+    """
+    import requests
+    import tempfile
+
+    print(f"Downloading KML from URL: {input_url}")
+    try:
+        resp = requests.get(input_url)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"Failed to download KML from {input_url}: {e}")
+        sys.exit(1)
+
+    # Write the downloaded KML to a temporary file
+    with tempfile.NamedTemporaryFile(suffix='.kml', delete=False) as tmp:
+        tmp.write(resp.content)
+        tmp_kml_path = tmp.name
+
+    print(f"Download complete. Temporary KML saved at {tmp_kml_path}")
+    # Convert that KML to CSV
+    convert_single_kml(tmp_kml_path, output_csv)
+
+    # Optionally remove the temp file
+    try:
+        os.remove(tmp_kml_path)
+        print(f"Removed temporary file: {tmp_kml_path}")
+    except OSError as e:
+        print(f"Could not delete temp file {tmp_kml_path}: {e}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='KML to G1000 CSV Converter',
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+
+    # Input arguments
+    parser.add_argument(
+        '--input-kml',
+        type=str,
+        help='Specify a single KML file (ForeFlight or FlightAware) for conversion.'
+    )
+    parser.add_argument(
+        '--input-kml-dir',
+        type=str,
+        help='Specify a directory of KML files (acts on all *.kml in the directory).'
+    )
+    parser.add_argument(
+        '--input-url',
+        type=str,
+        help='Specify a FlightAware (or other) URL to download a KML for conversion.'
+    )
+
+    # Output arguments
+    parser.add_argument(
+        '--output-csv',
+        type=str,
+        help=(
+            "Output CSV file name for a single KML. "
+            "If not specified, uses the same directory/name as --input-kml. "
+            "Skipped if a file with this name already exists."
+        )
+    )
+    parser.add_argument(
+        '--output-csv-dir',
+        type=str,
+        help=(
+            "Output directory for multiple CSV files, used with --input-kml-dir. "
+            "If not specified, uses the same directory as --input-kml-dir. "
+            "Skipped if files already exist. If the directory does not exist, "
+            "the script throws an error and exits."
+        )
+    )
+
+    args = parser.parse_args()
+
+    # Decide which operation to perform
+    if args.input_kml_dir:
+        convert_directory_kml(args.input_kml_dir, args.output_csv_dir)
+    elif args.input_kml:
+        convert_single_kml(args.input_kml, args.output_csv)
+    elif args.input_url:
+        download_and_convert_url(args.input_url, args.output_csv)
+    else:
+        # No valid sub-command provided; print usage and exit
+        parser.print_help(sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
